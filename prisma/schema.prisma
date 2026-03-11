@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LeadStatus {
+  RAW
+  ENRICHED
+  SEQUENCED
+  SENT
+  REPLIED
+  SUPPRESSED
+}
+
+model Lead {
+  id                String     @id @default(uuid())
+  name              String
+  title             String?
+  company           String?
+  linkedinUrl       String?    @unique
+  country           String?
+  recentPostSummary       String?
+  pulledQuoteFromPost     String?
+  specificProjectOrMetric String?
+  placeOrPersonalDetail   String?
+  franchiseAngle          String?
+  careerTrigger           String?
+  email             String?
+  score             Int        @default(0)
+  status            LeadStatus @default(RAW)
+  draftEmail        String?
+  
+  // Relations
+  replies           Reply[]
+  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+model SuppressionList {
+  id        String   @id @default(uuid())
+  email     String?  @unique
+  domain    String?  @unique
+  reason    String?
+  createdAt DateTime @default(now())
+}
+
+model Reply {
+  id             String   @id @default(uuid())
+  leadId         String
+  lead           Lead     @relation(fields: [leadId], references: [id])
+  content        String
+  classification String?  // e.g. "Interested", "Not a fit", "Unsubscribe"
+  createdAt      DateTime @default(now())
+}
+
+model SystemSettings {
+  id             String   @id @default("singleton")
+  openAiApiKey   String?
+  resendApiKey   String?
+  maxSendsPerDay Int      @default(50)
+  updatedAt      DateTime @updatedAt
+}
