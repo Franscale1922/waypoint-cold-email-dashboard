@@ -26,6 +26,7 @@
 | **Grok** | AI Assistant | Real-time information retrieval and social/market trend analysis |
 | **Perplexity** | AI Research | AI-powered web search and research synthesis |
 | **Gemini** | AI Assistant | Google's AI for multimodal tasks, integration with Google Workspace |
+| **Google AI Studio** | AI Development | Google's platform for prototyping and experimenting with Gemini models and APIs |
 | **Antigravity** | AI Coding Agent | Agentic AI coding assistant (this tool) for building, debugging, and managing codebases |
 | **NotebookLM** | AI Research | Google's AI notebook for synthesizing long documents, PDFs, and research sources |
 | **n8n** | Automation / Workflow | Low-code workflow automation platform connecting apps, webhooks, and APIs |
@@ -50,6 +51,9 @@
 | **Lovart** | AI Creative / Design | AI-powered creative design and visual content generation |
 | **Replicate** | AI Model Hosting | Runs open-source AI image/video/audio models via API for custom media generation |
 | **Canva** | Design | Graphic design platform for presentations, social graphics, and brand materials |
+| **Gamma** | AI Presentations | AI-powered presentation and document builder for beautiful decks and web pages |
+| **Spline** | 3D Design | Browser-based 3D design tool for interactive animations and web visuals |
+| **Remotion** | Code-Based Video | Programmatic video creation using React/code for dynamic, data-driven video content |
 | **Image Upscaler** | Image Enhancement | AI image upscaling and enhancement for high-resolution marketing visuals |
 
 ---
@@ -73,6 +77,7 @@
 | **Google Slides** | Presentations | Pitch decks, investor presentations, and franchise discovery day materials |
 | **Google Docs** | Documents | SOPs, proposals, contracts, and collaborative writing |
 | **Adobe Acrobat** | PDF Management | PDF creation, electronic signatures (e-sign), and document management |
+| **Gmail** | Email | Primary email platform for client communication and Google Workspace integration |
 | **Slack** | Team Communication | Internal team messaging, project channels, and integrations hub |
 | **Telegram** | Messaging | External communications and quick async messaging with partners/clients |
 | **WhatsApp** | Messaging | Client and partner communication, especially international contacts |
@@ -92,6 +97,7 @@
 
 | Tool | Category | Purpose |
 |------|----------|---------|
+| **Go High Level** | CRM / Marketing Platform | All-in-one sales and marketing platform for pipelines, funnels, email, SMS, and automation |
 | **Clay** | Lead Enrichment | AI-powered lead enrichment, data sourcing, and outreach personalization at scale |
 | **Apollo** | Lead Database / Outreach | B2B contact database and email/LinkedIn outreach sequencing |
 | **Instantly** | Cold Email Outreach | Cold email sending platform with deliverability optimization and campaign sequencing |
