@@ -12,6 +12,7 @@
 | **Waypoint CRM** | CRM | Custom-built internal CRM for managing leads, clients, and franchise advisory workflows |
 | **Vercel** | Hosting / Deployment | Hosts and auto-deploys the Waypoint web application and dashboards via GitHub integration |
 | **Cloudflare** | Domain / DNS | Domain management, DNS routing, and security/CDN layer for all Waypoint web properties |
+| **GA4** | Analytics | Google Analytics 4 for tracking website traffic, user behavior, and conversion events |
 
 ---
 
@@ -36,6 +37,10 @@
 
 | Tool | Category | Purpose |
 |------|----------|---------|
+| **YouTube Studio** | YouTube Management | Managing the Waypoint YouTube channel, analytics, video publishing, and monetization |
+| **vidIQ** | YouTube Growth | YouTube SEO, keyword research, competitor analysis, and video performance optimization |
+| **Subscribr** | YouTube AI | AI-powered YouTube script writing, research, and channel growth strategy |
+| **Descript** | Video / Podcast Editing | AI-powered video and audio editing with transcription, overdub, and screen recording |
 | **Higgsfield** | AI Video Generation | AI-powered cinematic video generation for marketing and social content |
 | **HeyGen** | AI Avatar Video | AI avatar and talking-head video creation for personalized outreach and presentations |
 | **ElevenLabs** | AI Voice / Audio | AI voice cloning and text-to-speech for video narration and audio content |
@@ -45,6 +50,7 @@
 | **Lovart** | AI Creative / Design | AI-powered creative design and visual content generation |
 | **Replicate** | AI Model Hosting | Runs open-source AI image/video/audio models via API for custom media generation |
 | **Canva** | Design | Graphic design platform for presentations, social graphics, and brand materials |
+| **Image Upscaler** | Image Enhancement | AI image upscaling and enhancement for high-resolution marketing visuals |
 
 ---
 
@@ -73,12 +79,24 @@
 
 ---
 
+## 📱 Social Media & Publishing
+
+| Tool | Category | Purpose |
+|------|----------|---------|
+| **Typefully** | Social Publishing | Twitter/X and LinkedIn content scheduling, thread drafting, and analytics |
+| **beehiiv** | Email Newsletter | Newsletter platform for building and monetizing the Waypoint subscriber audience |
+
+---
+
 ## 🎯 Sales & Lead Generation
 
 | Tool | Category | Purpose |
 |------|----------|---------|
 | **Clay** | Lead Enrichment | AI-powered lead enrichment, data sourcing, and outreach personalization at scale |
 | **Apollo** | Lead Database / Outreach | B2B contact database and email/LinkedIn outreach sequencing |
+| **Instantly** | Cold Email Outreach | Cold email sending platform with deliverability optimization and campaign sequencing |
+| **Resend** | Transactional Email | Developer-friendly email API for sending transactional and automated emails |
+| **TidyCal** | Booking / Scheduling | Lightweight calendar booking tool for scheduling client discovery calls and consultations |
 
 ---
 
@@ -88,15 +106,17 @@
 Domain (Cloudflare)
     └── Web App (Vercel)
             └── Waypoint CRM (Custom Build)
-                    ├── Lead Pipeline → Apollo / Clay
+                    ├── Lead Pipeline → Apollo / Clay / Instantly
                     ├── Automation → n8n
-                    └── Data → Google Sheets
+                    ├── Booking → TidyCal
+                    ├── Email → Resend
+                    └── Data → Google Sheets → GA4
 
 Content / Media Pipeline:
     Plaud.ai / Whisper Flow → NotebookLM → ChatGPT / Claude
-    → Canva / HeyGen / Higgsfield / ElevenLabs
+    → Canva / HeyGen / Higgsfield / ElevenLabs / Descript
     → Opus Clip / CapCut / OBS
-    → Social / YouTube / Outreach
+    → YouTube Studio (vidIQ / Subscribr) + Typefully + beehiiv
 ```
 
 ---
