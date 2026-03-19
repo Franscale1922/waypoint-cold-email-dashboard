@@ -301,7 +301,9 @@ export function ImportLeadForm() {
         });
         if (res.ok) {
           const data = await res.json();
-          imported += Array.isArray(data) ? data.length : batch.length;
+          // API now returns { imported, failed } counts directly
+          imported += typeof data.imported === "number" ? data.imported : batch.length;
+          errors += typeof data.failed === "number" ? data.failed : 0;
         } else {
           errors += batch.length;
         }
