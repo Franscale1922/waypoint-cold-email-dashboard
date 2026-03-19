@@ -20,58 +20,124 @@ type ParseResult = {
   skipped: number;
 };
 
-// Normalise a header label: lowercase, strip spaces/underscores/hyphens/parens/dots
+// Normalise a header: lowercase, strip spaces/underscores/hyphens/parens/dots
 function norm(s: string): string {
   return s.trim().toLowerCase().replace(/[\s_\-().]/g, "");
 }
 
+/**
+ * Proper CSV/TSV parser that handles:
+ *  - Quoted fields containing embedded newlines, commas, tabs
+ *  - Escaped double-quotes ("")
+ *  - Both tab-delimited and comma-delimited files
+ */
+function splitIntoRows(text: string): string[][] {
+  // Auto-detect delimiter from first line
+  const firstNL = text.indexOf("\n");
+  const firstLine = firstNL > -1 ? text.slice(0, firstNL) : text;
+  const delimiter = firstLine.includes("\t") ? "\t" : ",";
+
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (inQuotes) {
+      if (ch === '"') {
+        if (next === '"') {
+          // Escaped double-quote
+          cell += '"';
+          i++;
+        } else {
+          // End of quoted field
+          inQuotes = false;
+        }
+      } else {
+        // Inside a quoted field — newlines are data, not row breaks
+        cell += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === delimiter) {
+        row.push(cell.trim());
+        cell = "";
+      } else if (ch === "\r" && next === "\n") {
+        row.push(cell.trim());
+        rows.push(row);
+        row = [];
+        cell = "";
+        i++; // skip the \n
+      } else if (ch === "\n") {
+        row.push(cell.trim());
+        rows.push(row);
+        row = [];
+        cell = "";
+      } else {
+        cell += ch;
+      }
+    }
+  }
+
+  // Flush last row
+  if (cell || row.length > 0) {
+    row.push(cell.trim());
+    if (row.some(c => c)) rows.push(row);
+  }
+
+  return rows;
+}
+
 function parseCSV(text: string): ParseResult {
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
-  if (lines.length < 2) return { valid: [], skipped: 0 };
+  const rows = splitIntoRows(text);
+  if (rows.length < 2) return { valid: [], skipped: 0 };
 
-  // Split on tab or comma (Exa exports tab-delimited sometimes)
-  const delimiter = lines[0].includes("\t") ? "\t" : ",";
+  const headers = rows[0].map(norm);
 
-  const rawHeaders = lines[0].split(delimiter);
-  const headers = rawHeaders.map(norm);
-
-  // Map normalised header → internal field name
+  // Internal field name map — normalised header → field key
   const fieldMap: Record<string, string> = {
-    // Name variants
+    // Full name
     name: "name",
     fullname: "name",
+
+    // Split name (Exa exports First Name + Last Name separately)
     firstname: "firstName",
     lastname: "lastName",
 
     // LinkedIn URL — Exa uses several column names
+    linkedinurlpublic: "linkedinUrl",           // "Linkedin URL Public"
+    linkedinurluniqueId: "linkedinUrlAlt",      // prefer public URL
+    linkedinurluniqueId2: "linkedinUrlAlt",
     linkedinurl: "linkedinUrl",
-    linkedinurlpublic: "linkedinUrl",
-    linkedinurluniqueid: "linkedinUrl",
     linkedin: "linkedinUrl",
     profileurl: "linkedinUrl",
-    salesnavigatorurl: "linkedinUrl",    // fallback if no public URL
     url: "linkedinUrl",
 
-    // Title / Job
+    // Title / current role
+    currentjob: "title",                        // "Current Job"
     title: "title",
     jobtitle: "title",
-    currentjob: "title",
     position: "title",
-    profileheadline: "title",            // Exa: "Profile Headline"
+    profileheadline: "title",                   // "Profile Headline"
 
     // Company
+    companyname: "company",                     // "Company Name"
     company: "company",
-    companyname: "company",              // Exa: "Company Name"
     organization: "company",
 
-    // Context signals
+    // Career signals
+    hasnewposition: "hasNewPosition",           // "Has New Position" — bool flag
     careertrigger: "careerTrigger",
     trigger: "careerTrigger",
-    hasnewposition: "careerTrigger",     // Exa: "Has New Position" — boolean flag
 
+    // Post/summary signals
+    profilesummary: "recentPostSummary",        // "Profile Summary"
     recentpostsummary: "recentPostSummary",
     postsummary: "recentPostSummary",
-    profilesummary: "recentPostSummary", // Exa: "Profile Summary"
 
     pulledquotefrompost: "pulledQuoteFromPost",
     quote: "pulledQuoteFromPost",
@@ -83,46 +149,42 @@ function parseCSV(text: string): ParseResult {
   const valid: LeadRow[] = [];
   let skipped = 0;
 
-  for (let i = 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue;
+  for (let i = 1; i < rows.length; i++) {
+    const cols = rows[i];
+    if (!cols.some(c => c)) continue; // skip blank rows
 
-    // Basic CSV split (handles quoted fields)
-    const cols = delimiter === "\t"
-      ? lines[i].split("\t")
-      : lines[i].match(/("(?:[^"]|"")*"|[^,]*)/g) ?? lines[i].split(",");
-
-    const clean = cols.map(c => c.replace(/^"|"$/g, "").replace(/""/g, '"').trim());
-
-    // Build raw row object keyed by internal field name
     const row: Record<string, string> = {};
     headers.forEach((h, idx) => {
       const field = fieldMap[h];
-      // Only set if not already set (first match wins)
-      if (field && !row[field]) {
-        row[field] = clean[idx] ?? "";
+      // First match wins — don't overwrite a good value with an alt
+      if (field && row[field] === undefined) {
+        row[field] = cols[idx] ?? "";
       }
     });
 
-    // Combine firstName + lastName into name if Full Name not present
+    // Combine First Name + Last Name if Full Name not present
     if (!row.name && (row.firstName || row.lastName)) {
       row.name = [row.firstName, row.lastName].filter(Boolean).join(" ").trim();
     }
 
-    // salesNavURL as fallback linkedinUrl
-    if (!row.linkedinUrl && row.salesnavigatorurl) {
-      row.linkedinUrl = row.salesnavigatorurl;
+    // "Linkedin URL Public" is preferred; fall back to unique ID URL
+    if (!row.linkedinUrl && row.linkedinUrlAlt) {
+      row.linkedinUrl = row.linkedinUrlAlt;
     }
 
-    // hasnewposition as a career trigger hint
-    if (row.careerTrigger === "true" || row.careerTrigger === "True") {
-      row.careerTrigger = "Has New Position";
+    // Convert Has New Position boolean to a career trigger label
+    if (row.hasNewPosition === "true" || row.hasNewPosition === "True" || row.hasNewPosition === "Yes") {
+      row.careerTrigger = row.careerTrigger || "Has New Position";
     }
 
     if (!row.name || !row.linkedinUrl) { skipped++; continue; }
 
+    // Clean up the LinkedIn URL — strip trailing commas Exa sometimes adds
+    const linkedinUrl = row.linkedinUrl.replace(/,\s*$/, "").trim();
+
     valid.push({
       name: row.name,
-      linkedinUrl: row.linkedinUrl,
+      linkedinUrl,
       title: row.title ?? "",
       company: row.company ?? "",
       careerTrigger: row.careerTrigger ?? "",
@@ -187,7 +249,6 @@ export function ImportLeadForm() {
     file.type === "text/plain" ||
     file.type === "text/tab-separated-values";
 
-  // Fix: only clear dragOver when leaving the drop zone itself, not child elements
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     if (dropRef.current && !dropRef.current.contains(e.relatedTarget as Node)) {
       setDragOver(false);
@@ -374,14 +435,14 @@ export function ImportLeadForm() {
 
                   {!csvFile && (
                     <div className="bg-slate-50 rounded-xl p-4">
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Exa / Exaboot columns detected</p>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Exa / Exaboot columns auto-detected</p>
                       <div className="grid grid-cols-2 gap-1 text-xs text-slate-600">
-                        <span><span className="font-mono bg-white px-1 rounded">Full Name</span> or <span className="font-mono bg-white px-1 rounded">First Name + Last Name</span></span>
+                        <span><span className="font-mono bg-white px-1 rounded">Full Name</span> or <span className="font-mono bg-white px-1 rounded">First + Last Name</span></span>
                         <span><span className="font-mono bg-white px-1 rounded">Linkedin URL Public</span></span>
                         <span><span className="font-mono bg-white px-1 rounded">Current Job</span> or <span className="font-mono bg-white px-1 rounded">Profile Headline</span></span>
                         <span><span className="font-mono bg-white px-1 rounded">Company Name</span></span>
                         <span><span className="font-mono bg-white px-1 rounded">Has New Position</span> <span className="text-slate-400">(career trigger)</span></span>
-                        <span><span className="font-mono bg-white px-1 rounded">Profile Summary</span> <span className="text-slate-400">(post summary)</span></span>
+                        <span><span className="font-mono bg-white px-1 rounded">Profile Summary</span> <span className="text-slate-400">(post signal)</span></span>
                       </div>
                     </div>
                   )}
