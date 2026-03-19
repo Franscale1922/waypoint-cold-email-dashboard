@@ -1,7 +1,33 @@
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { PrismaClient } from "@prisma/client";
 import { inngest } from "@/inngest/client";
 
+const prisma = new PrismaClient();
+
+// ── GET: return all leads (for sortable table) ────────────────────────────────
+export async function GET() {
+    try {
+        const leads = await prisma.lead.findMany({
+            orderBy: { createdAt: "desc" },
+            select: {
+                id: true,
+                name: true,
+                title: true,
+                company: true,
+                status: true,
+                score: true,
+                email: true,
+                createdAt: true,
+            },
+        });
+        return NextResponse.json(leads);
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        return NextResponse.json({ error: message }, { status: 500 });
+    }
+}
+
+// ── POST: upsert leads + fire Inngest events ──────────────────────────────────
 export async function POST(req: Request) {
     try {
         const body = await req.json();
@@ -24,12 +50,13 @@ export async function POST(req: Request) {
                         title: leadData.title || undefined,
                         company: leadData.company || undefined,
                         country: leadData.country || undefined,
+                        companyNewsEvent: leadData.companyNewsEvent || undefined,
                         recentPostSummary: leadData.recentPostSummary || undefined,
+                        careerTrigger: leadData.careerTrigger || undefined,
+                        franchiseAngle: leadData.franchiseAngle || undefined,
                         pulledQuoteFromPost: leadData.pulledQuoteFromPost || undefined,
                         specificProjectOrMetric: leadData.specificProjectOrMetric || undefined,
                         placeOrPersonalDetail: leadData.placeOrPersonalDetail || undefined,
-                        franchiseAngle: leadData.franchiseAngle || undefined,
-                        careerTrigger: leadData.careerTrigger || undefined,
                     },
                     create: {
                         name: leadData.name,
@@ -37,17 +64,18 @@ export async function POST(req: Request) {
                         title: leadData.title || null,
                         company: leadData.company || null,
                         country: leadData.country || null,
+                        companyNewsEvent: leadData.companyNewsEvent || null,
                         recentPostSummary: leadData.recentPostSummary || null,
+                        careerTrigger: leadData.careerTrigger || null,
+                        franchiseAngle: leadData.franchiseAngle || null,
                         pulledQuoteFromPost: leadData.pulledQuoteFromPost || null,
                         specificProjectOrMetric: leadData.specificProjectOrMetric || null,
                         placeOrPersonalDetail: leadData.placeOrPersonalDetail || null,
-                        franchiseAngle: leadData.franchiseAngle || null,
-                        careerTrigger: leadData.careerTrigger || null,
                         status: "RAW"
                     }
                 });
 
-                // Fire Inngest event — wrapped separately so a dispatch failure
+                // Fire Inngest event — wrapped separately so dispatch failure
                 // doesn't roll back the DB write
                 if (lead.status === "RAW") {
                     try {
@@ -55,16 +83,18 @@ export async function POST(req: Request) {
                             name: "workflow/lead.hunter.start",
                             data: { leadId: lead.id }
                         });
-                    } catch (inngestErr: any) {
-                        console.warn(`Inngest dispatch failed for lead ${lead.id}:`, inngestErr?.message);
+                    } catch (inngestErr: unknown) {
+                        const msg = inngestErr instanceof Error ? inngestErr.message : "Unknown";
+                        console.warn(`Inngest dispatch failed for lead ${lead.id}:`, msg);
                         // Lead is saved — Inngest can be retried manually
                     }
                 }
 
                 results.push({ success: true, id: lead.id });
 
-            } catch (leadErr: any) {
-                results.push({ success: false, error: leadErr.message, name: leadData.name });
+            } catch (leadErr: unknown) {
+                const msg = leadErr instanceof Error ? leadErr.message : "Unknown";
+                results.push({ success: false, error: msg, name: leadData.name });
             }
         }
 
@@ -73,7 +103,8 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ processed: results.length, imported, failed, results }, { status: 200 });
 
-    } catch (err: any) {
-        return NextResponse.json({ error: err.message }, { status: 500 });
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }

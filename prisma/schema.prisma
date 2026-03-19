@@ -14,6 +14,7 @@ enum LeadStatus {
   SEQUENCED
   SENT
   REPLIED
+  BOOKED
   SUPPRESSED
 }
 
@@ -24,12 +25,16 @@ model Lead {
   company           String?
   linkedinUrl       String?    @unique
   country           String?
-  recentPostSummary       String?
-  pulledQuoteFromPost     String?
-  specificProjectOrMetric String?
-  placeOrPersonalDetail   String?
-  franchiseAngle          String?
-  careerTrigger           String?
+  // ── Personalization signals (research-backed model, March 2026) ──────────
+  companyNewsEvent        String?  // Priority A: WARN Act, SEC 8-K, reorg, layoffs (macro, public)
+  recentPostSummary       String?  // Priority B: post topic paraphrase (never verbatim)
+  careerTrigger           String?  // Signal type: layoff / job change / burnout / opentowork
+  franchiseAngle          String?  // Internal context — not referenced in email
+  yearsInCurrentRole      Int?     // Scoring signal only — NEVER passed to email generator
+  // Legacy fields — no longer populated, kept for existing rows
+  pulledQuoteFromPost     String?  // BLACKLISTED
+  specificProjectOrMetric String?  // BLACKLISTED
+  placeOrPersonalDetail   String?  // BLACKLISTED
   email             String?
   score             Int        @default(0)
   status            LeadStatus @default(RAW)
@@ -63,6 +68,6 @@ model SystemSettings {
   id             String   @id @default("singleton")
   openAiApiKey   String?
   resendApiKey   String?
-  maxSendsPerDay Int      @default(50)
+  maxSendsPerDay Int      @default(15)
   updatedAt      DateTime @updatedAt
 }
