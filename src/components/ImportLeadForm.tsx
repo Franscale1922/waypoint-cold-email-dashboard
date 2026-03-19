@@ -298,7 +298,125 @@ export function ImportLeadForm() {
                                                                                     </button>button>
                                                             </div>div>
                                           </form>form>
+"use client";
+                      
+                      import { useState, useRef } from "react";
+                                                  import { PlusCircle, Loader2, Upload, CheckCircle, AlertCircle, X, FileText } from "lucide-react";
+                                                  import { useRouter } from "next/navigation";
+                                                  
+                                                  // --- Types ---
+                                                  type LeadRow = {
+                                                    name: string;
+                                                    linkedinUrl: string;
+                                                    title: string;
+                                                    company: string;
+                                                    careerTrigger: string;
+                                                    recentPostSummary: string;
+                                                    pulledQuoteFromPost: string;
+                                                    franchiseAngle: string;
+                                                  };
+                                                  
+                                                  type ParseResult = {
+                                                    valid: LeadRow[];
+                                                    skipped: number;
+                                                  };
+                                                  
+                                                  // --- CSV Parser ---
+                                                  function parseCSV(text: string): ParseResult {
+                                                    const lines = text.split(/\r?\n/).filter(l => l.trim());
+                                                    if (lines.length < 2) return { valid: [], skipped: 0 };
+                                                            const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/[\s_\-]/g, ""));
+                                                            const map: Record<string, string> = { name: "name", linkedinurl: "linkedinUrl", title: "title", company: "company" };
+                                                            const valid: LeadRow[] = [];
+                                                            let skipped = 0;
+                                                            for (let i = 1; i < lines.length; i++) {
+                                                                const cols = lines[i].split(",");
+                                                              const row: any = {};
+                                                              headers.forEach((h, idx) => { if (map[h]) row[map[h]] = cols[idx]; });
+                                                              if (row.name && row.linkedinUrl) valid.push(row); else skipped++;
+                                                          }
+                                                            return { valid, skipped };
+                                                          }
+                                                          
+                                                          // --- Component ---
+                                                          export function ImportLeadForm() {
+                                                            const router = useRouter();
+                                                            const fileRef = useRef<HTMLInputElement>(null);
+                                                              const [isOpen, setIsOpen] = useState(false);
+                                                              const [tab, setTab] = useState<"manual" | "csv">("manual");
+                                                                const [isLoading, setIsLoading] = useState(false);
+                                                                const [formData, setFormData] = useState<LeadRow>({ name: "", linkedinUrl: "", title: "", company: "", careerTrigger: "", recentPostSummary: "", pulledQuoteFromPost: "", franchiseAngle: "" });
+                                                                  const [csvFile, setCsvFile] = useState<File | null>(null);
+                                                                  const [preview, setPreview] = useState<LeadRow[]>([]);
+                                                                  const [uploadResult, setUploadResult] = useState<{ imported: number; errors: number } | null>(null);
+                                                                
+                                                                  const closeModal = () => { setIsOpen(false); setTab("manual"); setCsvFile(null); setPreview([]); setUploadResult(null); };
+                                                                
+                                                                  const handleManualSubmit = async (e: React.FormEvent) => {
+                                                                      e.preventDefault();
+                                                                    setIsLoading(true);
+                                                                    try {
+                                                                          const res = await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify([formData]) });
+                                                                      if (res.ok) { closeModal(); router.refresh(); }
+                                                                      } finally { setIsLoading(false); }
+                                                                      };
+                                                                
+                                                                  const handleCSVSubmit = async () => {
+                                                                      setIsLoading(true);
+                                                                    try {
+                                                                          const res = await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(preview) });
+                                                                      if (res.ok) setUploadResult({ imported: preview.length, errors: 0 });
+                                                                      } finally { setIsLoading(false); }
+                                                                      };
+                                                                
+                                                                  return (
+                                                                    <>
+                                                                          <div className="flex gap-2">
+                                                                                  <button onClick={() => { setTab("manual"); setIsOpen(true); }} className="bg-blue-600 text-white px-4 py-2 rounded">Import Lead</button>button>
+                                                                                  <button onClick={() => { setTab("csv"); setIsOpen(true); }} className="bg-emerald-600 text-white px-4 py-2 rounded">Bulk CSV</button>button>
+                                                                          </div>div>
+                                                                    
+                                                                          {isOpen && (
+                                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                                              <div className="bg-white p-6 rounded-xl w-full max-w-lg">
+                                                          <div className="flex justify-between mb-4">
+                                                                        <div className="flex gap-2">
+                                                                                        <button onClick={() => setTab("manual")} className={tab==="manual"?"font-bold":""}>Manual</button>button>
+                                                                                        <button onClick={() => setTab("csv")} className={tab==="csv"?"font-bold":""}>CSV</button>button>
+                                                                        </div>div>
+                                                                        <button onClick={closeModal}>X</button>button>
+                                                          </div>div>
+                                                    {tab === "manual" ? (
+                                                        <form onSubmit={handleManualSubmit} className="space-y-4">
+                                                                        <input required placeholder="Name" className="border w-full p-2" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                                                                        <input required placeholder="LinkedIn" className="border w-full p-2" value={formData.linkedinUrl} onChange={e => setFormData({...formData, linkedinUrl: e.target.value})} />
+                                                                        <button type="submit" className="bg-blue-600 text-white p-2 w-full">Save</button>button>
+                                                        </form>form>
+                                                      ) : (
+                                                        <div className="space-y-4">
+                                                                        <input type="file" accept=".csv" onChange={e => {
+                                                                                const file = e.target.files?.[0];
+                                                                                if (file) {
+                                                                                                          const reader = new FileReader();
+                                                                                                          reader.onload = (ev) => {
+                                                                                                                                      const { valid } = parseCSV(ev.target?.result as string);
+                                                                                                                                      setPreview(valid);
+                                                                                                                                      setCsvFile(file);
+                                                                                                                };
+                                                                                                          reader.readAsText(file);
+                                                                                      }
+                                                        }} />
+                                                              {csvFile && <button onClick={handleCSVSubmit} className="bg-emerald-600 text-white p-2 w-full">Upload {preview.length} Leads</button>button>}
+                                                              {uploadResult && <p className="text-green-600">Import successful!</p>p>}
+                                                        </div>div>
                                                           )}
+                                              </div>div>
+                                    </div>div>
+                                                                          )}
+                                                                    </>>
+                                                                  );
+                                                                      }
+                                                                </></HTMLInputElement>)}
                                             
                                                 {/* --- CSV TAB --- */}
                                                 {tab === "csv" && (
