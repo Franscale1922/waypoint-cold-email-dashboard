@@ -163,11 +163,18 @@ export function ImportLeadForm() {
     }
   };
 
+  const isCSV = (file: File) =>
+    file.name.endsWith(".csv") ||
+    file.type === "text/csv" ||
+    file.type === "application/csv" ||
+    file.type === "application/vnd.ms-excel" ||
+    file.type === "text/plain";
+
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files[0];
-    if (file?.name.endsWith(".csv")) processFile(file);
+    if (file && isCSV(file)) processFile(file);
   };
 
   return (
@@ -276,7 +283,7 @@ export function ImportLeadForm() {
                       <Upload className="w-10 h-10 mx-auto text-slate-300 mb-3" />
                       <p className="text-sm font-medium text-slate-700">Drop your CSV here or <span className="text-emerald-600 underline">browse</span></p>
                       <p className="text-xs text-slate-400 mt-1">Accepts .csv files exported from Apollo, Sales Navigator, Clay, or any tool</p>
-                      <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f); }} />
+                      <input ref={fileRef} type="file" accept=".csv,text/csv,application/csv,application/vnd.ms-excel,text/plain" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f); }} />
                     </div>
                   )}
 
