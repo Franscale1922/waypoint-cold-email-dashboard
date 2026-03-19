@@ -20,41 +20,109 @@ type ParseResult = {
   skipped: number;
 };
 
+// Normalise a header label: lowercase, strip spaces/underscores/hyphens/parens/dots
+function norm(s: string): string {
+  return s.trim().toLowerCase().replace(/[\s_\-().]/g, "");
+}
+
 function parseCSV(text: string): ParseResult {
   const lines = text.split(/\r?\n/).filter(l => l.trim());
   if (lines.length < 2) return { valid: [], skipped: 0 };
 
-  const headers = lines[0].split(",").map(h =>
-    h.trim().toLowerCase().replace(/[\s_-]/g, "")
-  );
+  // Split on tab or comma (Exa exports tab-delimited sometimes)
+  const delimiter = lines[0].includes("\t") ? "\t" : ",";
 
-  const map: Record<string, string> = {
-    name: "name", fullname: "name", firstname: "name",
-    linkedinurl: "linkedinUrl", linkedin: "linkedinUrl",
-    profileurl: "linkedinUrl", url: "linkedinUrl",
-    title: "title", jobtitle: "title", position: "title",
-    company: "company", companyname: "company", organization: "company",
-    careertrigger: "careerTrigger", trigger: "careerTrigger",
-    recentpostsummary: "recentPostSummary", postsummary: "recentPostSummary",
-    pulledquotefrompost: "pulledQuoteFromPost", quote: "pulledQuoteFromPost",
-    franchiseangle: "franchiseAngle", angle: "franchiseAngle",
+  const rawHeaders = lines[0].split(delimiter);
+  const headers = rawHeaders.map(norm);
+
+  // Map normalised header → internal field name
+  const fieldMap: Record<string, string> = {
+    // Name variants
+    name: "name",
+    fullname: "name",
+    firstname: "firstName",
+    lastname: "lastName",
+
+    // LinkedIn URL — Exa uses several column names
+    linkedinurl: "linkedinUrl",
+    linkedinurlpublic: "linkedinUrl",
+    linkedinurluniqueid: "linkedinUrl",
+    linkedin: "linkedinUrl",
+    profileurl: "linkedinUrl",
+    salesnavigatorurl: "linkedinUrl",    // fallback if no public URL
+    url: "linkedinUrl",
+
+    // Title / Job
+    title: "title",
+    jobtitle: "title",
+    currentjob: "title",
+    position: "title",
+    profileheadline: "title",            // Exa: "Profile Headline"
+
+    // Company
+    company: "company",
+    companyname: "company",              // Exa: "Company Name"
+    organization: "company",
+
+    // Context signals
+    careertrigger: "careerTrigger",
+    trigger: "careerTrigger",
+    hasnewposition: "careerTrigger",     // Exa: "Has New Position" — boolean flag
+
+    recentpostsummary: "recentPostSummary",
+    postsummary: "recentPostSummary",
+    profilesummary: "recentPostSummary", // Exa: "Profile Summary"
+
+    pulledquotefrompost: "pulledQuoteFromPost",
+    quote: "pulledQuoteFromPost",
+
+    franchiseangle: "franchiseAngle",
+    angle: "franchiseAngle",
   };
 
   const valid: LeadRow[] = [];
   let skipped = 0;
 
   for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(",");
-    const clean = cols.map(c => c.replace(/^"|"$/g, "").trim());
+    if (!lines[i].trim()) continue;
+
+    // Basic CSV split (handles quoted fields)
+    const cols = delimiter === "\t"
+      ? lines[i].split("\t")
+      : lines[i].match(/("(?:[^"]|"")*"|[^,]*)/g) ?? lines[i].split(",");
+
+    const clean = cols.map(c => c.replace(/^"|"$/g, "").replace(/""/g, '"').trim());
+
+    // Build raw row object keyed by internal field name
     const row: Record<string, string> = {};
     headers.forEach((h, idx) => {
-      const field = map[h];
-      if (field) row[field] = clean[idx] ?? "";
+      const field = fieldMap[h];
+      // Only set if not already set (first match wins)
+      if (field && !row[field]) {
+        row[field] = clean[idx] ?? "";
+      }
     });
+
+    // Combine firstName + lastName into name if Full Name not present
+    if (!row.name && (row.firstName || row.lastName)) {
+      row.name = [row.firstName, row.lastName].filter(Boolean).join(" ").trim();
+    }
+
+    // salesNavURL as fallback linkedinUrl
+    if (!row.linkedinUrl && row.salesnavigatorurl) {
+      row.linkedinUrl = row.salesnavigatorurl;
+    }
+
+    // hasnewposition as a career trigger hint
+    if (row.careerTrigger === "true" || row.careerTrigger === "True") {
+      row.careerTrigger = "Has New Position";
+    }
+
     if (!row.name || !row.linkedinUrl) { skipped++; continue; }
+
     valid.push({
-      name: row.name ?? "",
-      linkedinUrl: row.linkedinUrl ?? "",
+      name: row.name,
+      linkedinUrl: row.linkedinUrl,
       title: row.title ?? "",
       company: row.company ?? "",
       careerTrigger: row.careerTrigger ?? "",
@@ -70,6 +138,7 @@ function parseCSV(text: string): ParseResult {
 export function ImportLeadForm() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
 
   const [isOpen, setIsOpen] = useState(false);
   const [tab, setTab] = useState<"manual" | "csv">("manual");
@@ -107,6 +176,29 @@ export function ImportLeadForm() {
       setSkipped(sk);
     };
     reader.readAsText(file);
+  };
+
+  const isCSV = (file: File) =>
+    file.name.endsWith(".csv") ||
+    file.name.endsWith(".tsv") ||
+    file.type === "text/csv" ||
+    file.type === "application/csv" ||
+    file.type === "application/vnd.ms-excel" ||
+    file.type === "text/plain" ||
+    file.type === "text/tab-separated-values";
+
+  // Fix: only clear dragOver when leaving the drop zone itself, not child elements
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    if (dropRef.current && !dropRef.current.contains(e.relatedTarget as Node)) {
+      setDragOver(false);
+    }
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file && isCSV(file)) processFile(file);
   };
 
   const handleManualSubmit = async (e: React.FormEvent) => {
@@ -161,20 +253,6 @@ export function ImportLeadForm() {
     if (errors === 0) {
       setTimeout(() => { closeModal(); router.refresh(); }, 1800);
     }
-  };
-
-  const isCSV = (file: File) =>
-    file.name.endsWith(".csv") ||
-    file.type === "text/csv" ||
-    file.type === "application/csv" ||
-    file.type === "application/vnd.ms-excel" ||
-    file.type === "text/plain";
-
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file && isCSV(file)) processFile(file);
   };
 
   return (
@@ -274,29 +352,36 @@ export function ImportLeadForm() {
                 <div className="space-y-5">
                   {!csvFile && (
                     <div
+                      ref={dropRef}
                       onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                      onDragLeave={() => setDragOver(false)}
+                      onDragLeave={handleDragLeave}
                       onDrop={onDrop}
                       onClick={() => fileRef.current?.click()}
                       className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${dragOver ? "border-emerald-400 bg-emerald-50" : "border-slate-200 hover:border-emerald-300 hover:bg-slate-50"}`}
                     >
                       <Upload className="w-10 h-10 mx-auto text-slate-300 mb-3" />
                       <p className="text-sm font-medium text-slate-700">Drop your CSV here or <span className="text-emerald-600 underline">browse</span></p>
-                      <p className="text-xs text-slate-400 mt-1">Accepts .csv files exported from Apollo, Sales Navigator, Clay, or any tool</p>
-                      <input ref={fileRef} type="file" accept=".csv,text/csv,application/csv,application/vnd.ms-excel,text/plain" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f); }} />
+                      <p className="text-xs text-slate-400 mt-1">Works with Exa, Apollo, Sales Navigator, Clay exports</p>
+                      <input
+                        ref={fileRef}
+                        type="file"
+                        accept=".csv,.tsv,text/csv,application/csv,application/vnd.ms-excel,text/plain,text/tab-separated-values"
+                        className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f); }}
+                      />
                     </div>
                   )}
 
                   {!csvFile && (
                     <div className="bg-slate-50 rounded-xl p-4">
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Supported Column Names</p>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Exa / Exaboot columns detected</p>
                       <div className="grid grid-cols-2 gap-1 text-xs text-slate-600">
-                        <span><span className="font-mono bg-white px-1 rounded">name</span> or <span className="font-mono bg-white px-1 rounded">full name</span></span>
-                        <span><span className="font-mono bg-white px-1 rounded">linkedin_url</span> or <span className="font-mono bg-white px-1 rounded">profile url</span></span>
-                        <span><span className="font-mono bg-white px-1 rounded">title</span> or <span className="font-mono bg-white px-1 rounded">job title</span></span>
-                        <span><span className="font-mono bg-white px-1 rounded">company</span></span>
-                        <span><span className="font-mono bg-white px-1 rounded">career_trigger</span> <span className="text-slate-400">(optional)</span></span>
-                        <span><span className="font-mono bg-white px-1 rounded">franchise_angle</span> <span className="text-slate-400">(optional)</span></span>
+                        <span><span className="font-mono bg-white px-1 rounded">Full Name</span> or <span className="font-mono bg-white px-1 rounded">First Name + Last Name</span></span>
+                        <span><span className="font-mono bg-white px-1 rounded">Linkedin URL Public</span></span>
+                        <span><span className="font-mono bg-white px-1 rounded">Current Job</span> or <span className="font-mono bg-white px-1 rounded">Profile Headline</span></span>
+                        <span><span className="font-mono bg-white px-1 rounded">Company Name</span></span>
+                        <span><span className="font-mono bg-white px-1 rounded">Has New Position</span> <span className="text-slate-400">(career trigger)</span></span>
+                        <span><span className="font-mono bg-white px-1 rounded">Profile Summary</span> <span className="text-slate-400">(post summary)</span></span>
                       </div>
                     </div>
                   )}
@@ -309,7 +394,7 @@ export function ImportLeadForm() {
                           <p className="text-sm font-medium text-slate-800 truncate">{csvFile.name}</p>
                           <p className="text-xs text-slate-500">
                             {preview.length} valid lead{preview.length !== 1 ? "s" : ""} parsed
-                            {skipped > 0 ? ` (${skipped} row${skipped !== 1 ? "s" : ""} skipped — missing name/URL)` : ""}
+                            {skipped > 0 ? ` (${skipped} row${skipped !== 1 ? "s" : ""} skipped — missing name or LinkedIn URL)` : ""}
                           </p>
                         </div>
                         <button onClick={() => { setCsvFile(null); setPreview([]); setSkipped(0); }} className="text-slate-400 hover:text-slate-600">
