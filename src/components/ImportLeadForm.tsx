@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 // --- Types -------------------------------------------------------------------
 type LeadRow = {
       name: string;
+      
       linkedinUrl: string;
       title: string;
       company: string;
